@@ -24,7 +24,9 @@ class RQVAE(nn.Module):
                  # sk_epsilons=[0,0,0.003,0.01]],
                  sk_epsilons=None,
                  sk_iters=100,
-                 use_linear=0
+                 use_linear=0,
+                 use_orth_loss=False,
+                 orth_loss_weight=0.0
         ):
         super(RQVAE, self).__init__()
 
@@ -41,6 +43,10 @@ class RQVAE(nn.Module):
         self.kmeans_iters = kmeans_iters
         self.sk_epsilons = sk_epsilons
         self.sk_iters = sk_iters
+        
+        self.use_orth_loss = use_orth_loss
+        self.orth_loss_weight = orth_loss_weight
+
 
         self.encode_layer_dims = [self.in_dim] + self.layers + [self.e_dim]
         self.encoder = MLPLayers(layers=self.encode_layer_dims,
@@ -56,20 +62,49 @@ class RQVAE(nn.Module):
         self.decode_layer_dims = self.encode_layer_dims[::-1]
         self.decoder = MLPLayers(layers=self.decode_layer_dims,
                                        dropout=self.dropout_prob,bn=self.bn)
+        
+    def compute_orth_loss(self, codes):
+        """
+        codes: [*X, L, D]  其中 *X = x.shape[:-1] (token/item 维度)
+        返回：标量 loss
+        """
+        # 展平 token/item 维度 => [N, L, D]
+        L = codes.shape[-2]
+        if L < 2:
+            return codes.new_tensor(0.0)
+
+        codes = codes.reshape(-1, L, codes.shape[-1])           # [N, L, D]
+        codes = F.normalize(codes, dim=-1, eps=1e-12)           # 归一化得到 \tilde e
+        G = torch.matmul(codes, codes.transpose(-1, -2))        # [N, L, L]
+
+        # 取 off-diagonal 的平方和
+        eye = torch.eye(L, device=codes.device, dtype=torch.bool)
+        off_diag = ~eye
+        # sum_{i != j} (dot)^2 / (L(L-1))
+        loss_per = (G.pow(2)[:, off_diag]).sum(dim=-1) / (L * (L - 1))  # [N]
+        return loss_per.mean()
+
 
     def forward(self, x, use_sk=True):
         x = self.encoder(x)
-        x_q, rq_loss, indices, distances = self.rq(x,use_sk=use_sk)
+        # x_q, rq_loss, indices, distances = self.rq(x,use_sk=use_sk)
+        x_q, rq_loss, indices, distances, codes = self.rq(x, use_sk=use_sk)
         # print(indices.shape)
+        if self.use_orth_loss:
+            orth_loss = self.compute_orth_loss(codes)
+        else:
+            orth_loss = x.new_tensor(0.0)
         out = self.decoder(x_q)
 
-        return out, rq_loss, indices
+        return out, rq_loss, orth_loss, indices
 
     @torch.no_grad()
     def get_indices(self, xs, use_sk=False):
         x_e = self.encoder(xs)
-        _, _, indices, distances = self.rq(x_e, use_sk=use_sk)
+        _, _, indices, distances, _ = self.rq(x_e, use_sk=use_sk)
         return indices, distances
+        # _, _, indices, distances = self.rq(x_e, use_sk=use_sk)
+        # return indices, distances
 
     def compute_loss(self, out, quant_loss, xs=None):
 

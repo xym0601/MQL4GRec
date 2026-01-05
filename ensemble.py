@@ -2,7 +2,7 @@ import json
 import os
 import argparse
 from collections import defaultdict
-
+import swanlab
 from evaluate import get_topk_results, get_metrics_results
 
 def get_sort_results(predictions, scores, targets_ids, users, k, index2id):
@@ -109,7 +109,18 @@ def get_topk_results_ensemble(text_info, image_info):
 
     return results
 
+
+
 def main(args):
+
+    experiment_name = args.exp_name
+    swanlab.init(
+        project="MQL4GRec", # 确保和训练时的 project 一致
+        experiment_name=experiment_name,
+        config=vars(args), # 记录这次评估的参数
+        description="Ensemble Evaluation"
+    )
+
     metrics = args.metrics.split(",")
 
     text_save_file = os.path.join(args.output_dir, f'save_seqrec_{args.num_beams}.json')
@@ -129,6 +140,7 @@ def main(args):
         metrics_results[m] = metrics_results[m] / total
         
     print(metrics_results)
+    swanlab.log({f"Text/{k}": v for k, v in metrics_results.items()})
 
     #
     image_save_file = os.path.join(args.output_dir, f'save_seqimage_{args.num_beams}.json')
@@ -148,7 +160,7 @@ def main(args):
         metrics_results[m] = metrics_results[m] / total
         
     print(metrics_results)
-
+    swanlab.log({f"Image/{k}": v for k, v in metrics_results.items()})
     ########################
 
 
@@ -199,12 +211,12 @@ def main(args):
         metrics_results[m] = metrics_results[m] / total
         
     print(metrics_results)
-
     print(total)
     
+    swanlab.log({f"Ensemble/{k}": v for k, v in metrics_results.items()})
     save_file = os.path.join(args.output_dir, f'results_ensemble_{args.num_beams}.json')
     json.dump(metrics_results, open(save_file, 'w'), indent=4)
-
+    swanlab.finish()
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Index")
@@ -221,7 +233,7 @@ def parse_args():
     
     parser.add_argument("--metrics", type=str, default="hit@1,hit@5,hit@10,ndcg@5,ndcg@10", help="Input data path.")
     parser.add_argument("--num_beams", type=int, default=20, help="Input data path.")
-
+    parser.add_argument("--exp_name", type=str, default=None, help="Custom experiment name for SwanLab.")
     return parser.parse_args()
 
 

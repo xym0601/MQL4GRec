@@ -85,6 +85,8 @@ if __name__ == '__main__':
                   kmeans_iters=args.kmeans_iters,
                   sk_epsilons=args.sk_epsilons,
                   sk_iters=args.sk_iters,
+                  use_orth_loss=True,
+                  orth_loss_weight=0.1
                   )
     print(model)
     data_loader = DataLoader(data,num_workers=args.num_workers,

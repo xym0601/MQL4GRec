@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-
+import torch.nn.functional as F
 from .vq import VectorQuantizer
 
 
@@ -39,6 +39,7 @@ class ResidualVectorQuantizer(nn.Module):
         all_losses = []
         all_indices = []
         all_distances = []
+        all_codes = []
 
         x_q = 0
         residual = x
@@ -50,9 +51,25 @@ class ResidualVectorQuantizer(nn.Module):
             all_losses.append(loss)
             all_indices.append(indices)
             all_distances.append(distance)
+            
+            # ===== 新增：把每层选中的码字向量取出来 =====
+            # indices shape: x.shape[:-1]
+            flat_idx = indices.reshape(-1)  # [N]
+            # embeddings_weight 要与 quantizer.forward 里保持一致（考虑 use_linear）
+            if quantizer.use_linear == 1:
+                embeddings_weight = quantizer.codebook_projection(quantizer.embedding.weight)
+                code_vec = F.embedding(flat_idx, embeddings_weight)  # [N, e_dim]
+            else:
+                code_vec = quantizer.embedding(flat_idx)             # [N, e_dim]
+            code_vec = code_vec.view(*indices.shape, self.e_dim)     # [*x.shape[:-1], e_dim]
+            all_codes.append(code_vec)
+
 
         mean_losses = torch.stack(all_losses).mean()
         all_indices = torch.stack(all_indices, dim=-1)
         all_distances = torch.stack(all_distances, dim=1)
+        
+        # 新增：codes 堆叠，shape: [*x.shape[:-1], L, e_dim]
+        all_codes = torch.stack(all_codes, dim=-2)
 
-        return x_q, mean_losses, all_indices, all_distances
+        return x_q, mean_losses, all_indices, all_distances, all_codes

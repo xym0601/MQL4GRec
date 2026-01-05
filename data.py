@@ -181,6 +181,7 @@ class SeqRecDataset(BaseDataset):
         self.train_data_mode = args.train_data_mode
         self.add_prompt = args.add_prompt
         self.task = task
+        self.user_interest = None
         # self.soft_prompt = args.soft_prompts[task]
         
         # load data
@@ -209,6 +210,10 @@ class SeqRecDataset(BaseDataset):
         elif self.task == 'seqimage':
             with open(os.path.join(self.data_path, self.dataset + self.args.image_index_file), 'r') as f:
                 self.indices = json.load(f)
+        interest_path = os.path.join(self.data_path, "User_Interest_IDs.json")
+        # print(interest_path)
+        with open(interest_path, "r") as f:
+            self.user_interest = json.load(f)
 
     def _remap_items(self):
 
@@ -227,7 +232,7 @@ class SeqRecDataset(BaseDataset):
                 items = self.remapped_inters[uid][:-2]
                 for i in range(1, len(items)):
                     one_data = dict()
-                    # one_data["user"] = uid
+                    one_data["user"] = uid
                     one_data["item"] = items[i]
                     history = items[:i]
                     if self.max_his_len > 0:
@@ -267,7 +272,7 @@ class SeqRecDataset(BaseDataset):
         for uid in self.remapped_inters:
             items = self.remapped_inters[uid]
             one_data = dict()
-            # one_data["user"] = uid
+            one_data["user"] = uid
             one_data["item"] = items[-2]
             history = items[:-2]
             if self.max_his_len > 0:
@@ -284,7 +289,7 @@ class SeqRecDataset(BaseDataset):
         for uid in self.remapped_inters:
             items = self.remapped_inters[uid]
             one_data = dict()
-            # one_data["user"] = uid
+            one_data["user"] = uid
             one_data["item"] = items[-1]
             history = items[:-1]
             if self.max_his_len > 0:
@@ -379,8 +384,25 @@ class SeqRecDataset(BaseDataset):
         else:
             input = ''.join(d["inters"])
             output = d["item"]
+        uid = str(d["user"])
+        interest_tokens = self.user_interest.get(uid, [])
+        interest_text = " ".join(interest_tokens)   # "<o_70><p_131><q_131>"
+        
+        # if not hasattr(self, "_debug_printed"):
+        #     self._debug_printed = 0
+        # if self._debug_printed < 3:
+        #     print("[CHECK dataset] uid:", d.get("user"),
+        #         "interest:", interest_text,
+        #         "input_ids(head):", input[:50],
+        #         "label:", output,
+        #         flush=True)
+        #     self._debug_printed += 1
 
-        return dict(input_ids=input, labels=output, label=index)
+
+        return dict(input_ids=input, labels=output, interest=interest_text, label=index)
+
+
+        # return dict(input_ids=input, labels=output, label=index)
         # return dict(input_ids=input, labels=output)
     
 class ItemImageDataset(BaseDataset):

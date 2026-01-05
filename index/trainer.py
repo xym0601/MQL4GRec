@@ -89,10 +89,25 @@ class Trainer(object):
         for batch_idx, data in enumerate(iter_data):
             data = data.to(self.device)
             self.optimizer.zero_grad()
-            out, rq_loss, indices = self.model(data)
+            # out, rq_loss, indices = self.model(data)
+            # loss, loss_recon = self.model.compute_loss(out, rq_loss, xs=data)
+            out, rq_loss, orth_loss, indices = self.model(data)
             loss, loss_recon = self.model.compute_loss(out, rq_loss, xs=data)
+            if batch_idx % 100 == 0:
+                print(f"[epoch {epoch_idx} batch {batch_idx}] "
+                    f"recon={loss_recon.item():.6f} rq={rq_loss.item():.6f} "
+                    f"orth={orth_loss.item():.6f} "
+                    f"total={loss.item():.6f}")
+
+            # ===== 新增：把 orth loss 加进总 loss（权重在 RQVAE 里）=====
+            loss = loss + self.model.orth_loss_weight * orth_loss
             self._check_nan(loss)
             loss.backward()
+            if epoch_idx == 0 and batch_idx == 0:
+                # 看第一层码本梯度是否存在且非零
+                g = self.model.rq.vq_layers[0].embedding.weight.grad
+                print("grad exists:", g is not None,
+                    "grad mean abs:", g.abs().mean().item() if g is not None else None)
             self.optimizer.step()
             total_loss += loss.item()
             total_recon_loss += loss_recon.item()

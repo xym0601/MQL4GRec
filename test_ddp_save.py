@@ -5,6 +5,7 @@ import os
 import sys
 
 import torch
+import torch.nn as nn
 import transformers
 import torch.distributed as dist
 from torch.utils.data.distributed import DistributedSampler
@@ -13,11 +14,12 @@ from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import LlamaForCausalLM, LlamaTokenizer, LlamaConfig, T5Tokenizer, T5Config, T5ForConditionalGeneration
-
+from transformers.models.t5.modeling_t5 import T5LayerCrossAttention, T5LayerNorm
 from utils import *
-from collator import TestCollator, TestCollatorSave
+from collator import TestCollatorSave
 from evaluate import get_topk_results, get_metrics_results
 from generation_trie import Trie
+from finetune import InterestCrossAttnT5
 
 def gather_list(target, world_size):
     
@@ -48,12 +50,17 @@ def test_ddp(args):
 
 
     tokenizer = T5Tokenizer.from_pretrained(args.ckpt_path)
-    model = T5ForConditionalGeneration.from_pretrained(
+    # model = T5ForConditionalGeneration.from_pretrained(
+    #     args.ckpt_path,
+    #     low_cpu_mem_usage=True,
+    #     device_map=device_map,
+    # )
+    model = InterestCrossAttnT5.from_pretrained(
         args.ckpt_path,
         low_cpu_mem_usage=True,
         device_map=device_map,
     )
-
+    
     model = DistributedDataParallel(model, device_ids=[local_rank])
 
     prompt_ids = [0]
@@ -153,6 +160,27 @@ def test_ddp(args):
                 all_targets.extend(targets)
                 all_users.extend(users)
                 
+                if local_rank == 0:
+                    max_show = 50
+                    cnt = 0
+                    print("\n========== DEBUG WRONG CASES ==========")
+                    for i in range(len(output)):
+                        pred = str(output[i]).strip()
+                        gold = str(targets[i]).strip()
+
+                        if pred != gold:
+                            print(f"\n--- wrong sample {cnt} (idx {i}) ---")
+                            print("user:", users[i] if users is not None else None)
+                            print("score:", scores[i] if isinstance(scores, list) else None)
+                            print("PRED :", pred)
+                            print("GOLD :", gold)
+                            cnt += 1
+                            if cnt >= max_show:
+                                break
+                    print(f"\nTotal wrong shown: {cnt}")
+                    print("======================================\n")
+
+
                 save_dict['all_outputs'] = all_outputs
                 save_dict['all_scores'] = all_scores
                 save_dict['all_targets'] = all_targets

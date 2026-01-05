@@ -3,7 +3,7 @@
 Model=llama
 Code_num=256
 
-Datasets='Instruments,Arts,Games,Pet,Cell,Automotive,Tools,Toys,Sports'
+Datasets='Instruments'
 
 OUTPUT_DIR=log/$Datasets/${Model}_${Code_num}
 mkdir -p $OUTPUT_DIR
@@ -18,12 +18,12 @@ python -u main_mul.py \
   --ckpt_dir $OUTPUT_DIR \
   --eval_step 2 \
   --batch_size 2048 \
-  --epochs 500 > $OUTPUT_DIR/train.log
+  --epochs 1000 > $OUTPUT_DIR/train.log
 
 Model=ViT-L-14
 Code_num=256
 
-Datasets='Instruments,Arts,Games,Pet,Cell,Automotive,Tools,Toys,Sports'
+Datasets='Instruments'
 
 OUTPUT_DIR=log/$Datasets/${Model}_${Code_num}
 mkdir -p $OUTPUT_DIR
@@ -38,4 +38,4 @@ python -u main_mul.py \
   --ckpt_dir $OUTPUT_DIR \
   --eval_step 2 \
   --batch_size 2048 \
-  --epochs 500 > $OUTPUT_DIR/train.log
+  --epochs 1000 > $OUTPUT_DIR/train.log
